@@ -177,7 +177,7 @@ class NewCommand extends PWConnector {
         $httpHosts = $this->ask('httpHosts', 'Please enter the hostname without `www.`', 'pw.local');
         $this->defaults['httpHosts'] = $httpHosts . "\n" . "www." . $httpHosts;
         $this->defaults['username'] = $this->ask('username', 'Please enter admin user name', 'admin');
-        $this->defaults['userpass'] = $this->ask('userpass', 'Please enter admin password', 'password', true);
+        $this->defaults['userpass'] = $this->ask('userpass', 'Please enter admin password', 'password', true, null, 'password');
         $this->defaults['userpass_confirm'] = $this->defaults['userpass'];
         $this->defaults['useremail'] = $this->ask('useremail', 'Please enter admin email address', null, false, null, 'email');
 
@@ -269,6 +269,15 @@ class NewCommand extends PWConnector {
               throw new \RuntimeException('Please enter a valid email address.');
             }
             return $answer;
+          });
+          break;
+        case 'password':
+          $question->setValidator(function ($answer) use ($default) {
+            $value = ($answer === null || $answer === '') ? $default : $answer;
+            if (!$value || strlen($value) < 6) {
+              throw new \RuntimeException('Password must be at least 6 characters long.');
+            }
+            return $value;
           });
           break;
         }

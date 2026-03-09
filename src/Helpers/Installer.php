@@ -683,6 +683,10 @@ class Installer {
    */
   protected function mkdir($path, $showNote = true) {
     if (self::TEST_MODE) return;
+    if (is_dir($path)) {
+      if ($showNote && $this->v) $this->log->info("Directory already exists: $path");
+      return true;
+    }
     if (mkdir($path)) {
       chmod($path, octdec($this->chmodDir));
       if ($showNote && $this->v) $this->log->info("Created directory: $path");
