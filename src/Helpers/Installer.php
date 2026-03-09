@@ -448,7 +448,9 @@ class Installer {
    */
   protected function profileImport($database) {
     $profile = $this->projectDir . '/site/install/';
-    if (!is_file("{$profile}install.sql")) die("No installation profile found in {$profile}");
+    if (!is_file("{$profile}install.sql")) {
+      throw new \RuntimeException("No installation profile found in {$profile}");
+    }
 
     // checks to see if the database exists using an arbitrary query (could just as easily be something else)
     try {

@@ -181,9 +181,32 @@ class NewCommand extends PWConnector {
         $this->defaults['userpass_confirm'] = $this->defaults['userpass'];
         $this->defaults['useremail'] = $this->ask('useremail', 'Please enter admin email address', null, false, null, 'email');
 
+        // If install SQL files are missing (e.g. previously cleaned up), recover them
+        $recoveredInstallFiles = false;
+        $coreSqlMissing = !is_file($this->projectDir . '/wire/core/install.sql');
+        $profileSqlMissing = !is_file($this->projectDir . '/site/install/install.sql');
+
+        if ($coreSqlMissing || $profileSqlMissing) {
+          $this->tools->writeInfo('Installation files missing, downloading ProcessWire temporarily to recover them...');
+          $recoveredInstallFiles = $this->recoverInstallFiles($branch, $coreSqlMissing, $profileSqlMissing);
+        }
+
         // ... install!
         $this->installer->dbSaveConfig($this->defaults);
-        $this->cleanUpInstallation();
+
+        // Clean up recovered install files
+        if ($recoveredInstallFiles) {
+          if ($coreSqlMissing) {
+            $this->fs->remove($this->projectDir . '/wire/core/install.sql');
+            $this->fs->remove($this->projectDir . '/wire/core/WireDatabaseBackup.php');
+          }
+          if ($profileSqlMissing) {
+            $this->fs->remove($this->projectDir . '/site/install');
+          }
+        } else {
+          $this->cleanUpInstallation();
+        }
+
         $this->tools->writeSuccess('ᕙ(✧‿✧)ᕗ Congratulations, ProcessWire has been successfully installed.');
 
       }
@@ -538,6 +561,69 @@ class NewCommand extends PWConnector {
   }
 
   /**
+   * Download ProcessWire to a temp dir and recover missing install SQL files
+   *
+   * @param string $branch
+   * @param boolean $coreSqlMissing
+   * @param boolean $profileSqlMissing
+   * @return boolean
+   */
+  private function recoverInstallFiles($branch, $coreSqlMissing, $profileSqlMissing) {
+    $tempDir = sys_get_temp_dir() . DIRECTORY_SEPARATOR . '.pw-recover-' . uniqid(time());
+    $this->fs->mkdir($tempDir);
+
+    try {
+      $tempDownloader = new Downloader($this->output, $tempDir, $this->version);
+      $compressedFile = $tempDownloader->download($branch);
+      $this->tools->nl();
+
+      $this->tools->writeBlockBasic('Extracting install files...');
+      $tempDownloader->extract($compressedFile, $tempDir, 'ProcessWire', true);
+      $this->fs->remove(dirname($compressedFile));
+
+      if ($coreSqlMissing) {
+        $this->fs->mkdir($this->projectDir . '/wire/core');
+        if (is_file($tempDir . '/wire/core/install.sql')) {
+          $this->fs->copy($tempDir . '/wire/core/install.sql', $this->projectDir . '/wire/core/install.sql', true);
+        }
+        if (is_file($tempDir . '/wire/core/WireDatabaseBackup.php')) {
+          $this->fs->copy($tempDir . '/wire/core/WireDatabaseBackup.php', $this->projectDir . '/wire/core/WireDatabaseBackup.php', true);
+        }
+      }
+
+      if ($profileSqlMissing) {
+        // Find the site profile in the temp download
+        $profile = $this->input->getOption('profile');
+        $siteDir = $profile ? 'site-' . $profile : 'site-blank';
+
+        // Try site/ first (already renamed), then site-* folders
+        $sourceSiteInstall = null;
+        if (is_dir($tempDir . '/site/install')) {
+          $sourceSiteInstall = $tempDir . '/site/install';
+        } else if (is_dir($tempDir . '/' . $siteDir . '/install')) {
+          $sourceSiteInstall = $tempDir . '/' . $siteDir . '/install';
+        } else {
+          // Find any site-* folder with install/
+          foreach (glob($tempDir . '/site-*/install', GLOB_ONLYDIR) as $dir) {
+            $sourceSiteInstall = $dir;
+            break;
+          }
+        }
+
+        if ($sourceSiteInstall) {
+          $this->fs->mirror($sourceSiteInstall, $this->projectDir . '/site/install');
+        }
+      }
+
+      $this->fs->remove($tempDir);
+      return true;
+    } catch (\Exception $e) {
+      $this->fs->remove($tempDir);
+      throw new \RuntimeException('Failed to recover install files: ' . $e->getMessage());
+    }
+  }
+
+  /**
    * Removes all the temporary files and directories created to
    * install the project and removes ProcessWire-related files that don't make
    * sense in a running project.
@@ -545,7 +631,7 @@ class NewCommand extends PWConnector {
    * @return NewCommand
    */
   private function cleanUpInstallation() {
-    $this->fs->remove(dirname($this->compressedFilePath));
+    if ($this->compressedFilePath) $this->fs->remove(dirname($this->compressedFilePath));
 
     try {
       $siteDirs = glob($this->projectDir . '/site-*');
