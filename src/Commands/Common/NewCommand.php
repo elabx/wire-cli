@@ -158,7 +158,7 @@ class NewCommand extends PWConnector {
         $this->checkProcessWireRequirements();
 
         // use defaults it not set
-        $doNotAsk = array('dbHost', 'dbPort', 'dbEngine', 'dbCharset', 'chmodDir', 'chmodFile', 'adminUrl');
+        $doNotAsk = array('dbPort', 'dbEngine', 'dbCharset', 'chmodDir', 'chmodFile', 'adminUrl');
         foreach ($doNotAsk as $item) if ($input->getOption($item)) $this->defaults[$item] = $input->getOption($item);
 
         // ask
@@ -201,6 +201,7 @@ class NewCommand extends PWConnector {
    * @param boolean $doAsk whether to ask if params were provided
    */
   private function askDbInformations($doAsk = false) {
+    $this->defaults['dbHost'] = $this->ask('dbHost', 'Please enter the database host', 'localhost', null, null, null, $doAsk);
     $this->defaults['dbUser'] = $this->ask('dbUser', 'Please enter the database user name', 'root', null, null, null, $doAsk);
 
     // allow empty passwords `--dbPass=""`
